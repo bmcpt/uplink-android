@@ -1,40 +1,55 @@
 name: Release
 
 on:
-  release:
-    types: [published]
-
-env:
-  RUSTFLAGS: -Dwarnings
-  RUST_BACKTRACE: 1
+  push:
+    tags:
+    - '*'
 
 jobs:
-  release:
-    name: Release AAR
+  build:
     runs-on: ubuntu-latest
-    container: devduttshenoi/androidxbuild:0.1
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-            toolchain: stable
-            override: true
 
-      - name: Set up JDK 11
-        uses: actions/setup-java@v2
+    steps:
+      - uses: actions/checkout@v3
+      - name: set up JDK 11
+        uses: actions/setup-java@v3
         with:
-          distribution: 'zulu'
-          java-version: 11
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v2
 
-      - name: Build AAR
-        run: ./gradlew --no-daemon build
-
-      - name: Upload AAR
-        uses: JasonEtco/upload-to-release@master
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1.0.6
         with:
-          args: lib/build/outputs/aar/uplink-release.aar
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ndk-version: r25b
+
+      - name: Save keystore.jks
+        uses: timheuer/base64-to-file@v1.1
+        with:
+          fileName: keystore.jks
+          fileDir: .
+          encodedString: ${{ secrets.KEYSTORE_JKS }}
+
+      - name: Save local.properties
+        uses: timheuer/base64-to-file@v1.1
+        with:
+          fileName: local.properties
+          fileDir: .
+          encodedString: ${{ secrets.LOCAL_PROPERTIES }}
+
+      - name: rust-toolchain
+        run: rustup show
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew :buildArtifacts
+
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "build/release/*"
+
